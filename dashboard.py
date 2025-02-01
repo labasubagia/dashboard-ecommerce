@@ -8,7 +8,7 @@ sns.set(style="dark")
 
 
 def create_daily_order_df(df: pd.DataFrame) -> pd.DataFrame:
-    res = df.resample(rule="D", on="order_approved_at").agg(
+    res = df.resample(rule="D", on="order_purchase_timestamp").agg(
         {"order_id": "nunique", "total_order_price": "sum"}
     )
     # monthly_orders_df.index = monthly_orders_df.index.strftime("%Y-%m")
@@ -40,7 +40,8 @@ def create_order_per_seller_df(df: pd.DataFrame) -> pd.DataFrame:
 
 def create_rating_per_seller_df(df: pd.DataFrame) -> pd.DataFrame:
     res = (
-        df.groupby("seller_id")
+        df[~df["review_score"].isna()]
+        .groupby("seller_id")
         .agg(
             {
                 "review_score": "mean",
@@ -62,10 +63,10 @@ def create_rating_per_seller_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def create_rfm_df(df: pd.DataFrame) -> pd.DataFrame:
-    df["order_approved_at"] = pd.to_datetime(df["order_approved_at"])
+    df["order_purchase_timestamp"] = pd.to_datetime(df["order_purchase_timestamp"])
 
-    max_date = df["order_approved_at"].max()
-    df["recency"] = (max_date - df["order_approved_at"]).dt.days
+    max_date = df["order_purchase_timestamp"].max()
+    df["recency"] = (max_date - df["order_purchase_timestamp"]).dt.days
 
     frequency = (
         df.groupby("customer_id")["order_id"].count().reset_index(name="frequency")
@@ -91,22 +92,15 @@ all_df: pd.DataFrame = pd.read_csv("./main_data.csv")
 
 datetime_columns = [
     "order_purchase_timestamp",
-    "order_approved_at",
-    # "order_delivered_carrier_date",
-    # "order_delivered_customer_date",
-    # "order_estimated_delivery_date",
-    # "shipping_limit_date",
-    # "review_creation_date",
-    # "review_answer_timestamp",
 ]
-all_df.sort_values(by="order_approved_at", ascending=True)
+all_df.sort_values(by="order_purchase_timestamp", ascending=True)
 all_df.reset_index(inplace=True)
 
 for column in datetime_columns:
     all_df[column] = pd.to_datetime(all_df[column])
 
-min_date = all_df["order_approved_at"].min()
-max_date = all_df["order_approved_at"].max()
+min_date = all_df["order_purchase_timestamp"].min()
+max_date = all_df["order_purchase_timestamp"].max()
 
 with st.sidebar:
     st.title("E-Commerce")
@@ -118,8 +112,8 @@ with st.sidebar:
     )  # type: ignore
 
 main_df: pd.DataFrame = all_df[
-    (all_df["order_approved_at"] >= str(start_date))
-    & (all_df["order_approved_at"] <= str(end_date))
+    (all_df["order_purchase_timestamp"] >= str(start_date))
+    & (all_df["order_purchase_timestamp"] <= str(end_date))
 ]
 
 
@@ -146,7 +140,7 @@ with col2:
 
 fig, ax = plt.subplots(figsize=(16, 8))
 ax.plot(
-    daily_order_df["order_approved_at"],
+    daily_order_df["order_purchase_timestamp"],
     daily_order_df["order_count"],
     marker="o",
     linewidth=2,
@@ -228,6 +222,19 @@ ax[1].invert_xaxis()
 ax[1].yaxis.set_label_position("right")
 ax[1].yaxis.tick_right()
 
+st.pyplot(fig)
+
+st.subheader("Seller revenue")
+fig = plt.figure(figsize=(10, 6))
+plt.scatter(
+    order_per_seller_df["order_count"],
+    order_per_seller_df["revenue"],
+    marker=".",
+)
+plt.xlabel("Order Count")
+plt.ylabel("Revenue")
+plt.title("Seller performance comparison")
+plt.grid(True)
 st.pyplot(fig)
 
 
